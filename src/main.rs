@@ -125,7 +125,21 @@ async fn main() -> Result<()> {
             });
 
             match putio::account_info(&app_data.config.putio.api_key).await {
-                Ok(_) => {}
+                Ok(account_info) => {
+                    info!(
+                        "Logged in as user: {} (ID: {}) with email: {}",
+                        account_info.info.username,
+                        account_info.info.user_id,
+                        account_info.info.mail
+                    );
+                    info!(
+                        "Available space: {:.2} GB out of {:.2} GB ({:.2}%)",
+                        account_info.info.disk.avail as f64 / 1_073_741_824.0,
+                        account_info.info.disk.size as f64 / 1_073_741_824.0,
+                        account_info.info.disk.avail as f64 / account_info.info.disk.size as f64
+                            * 100.0
+                    );
+                }
                 Err(e) => {
                     error!("{}", e);
                     bail!(e)

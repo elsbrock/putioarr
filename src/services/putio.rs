@@ -41,14 +41,66 @@ impl PutIOTransfer {
 #[derive(Debug, Deserialize)]
 pub struct AccountInfoResponse {
     pub info: Info,
+    pub status: String, // "OK"
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Info {
-    pub user_id: u32,
-    pub username: String,
+    pub account_active: bool,
+    pub account_status: String, // e.g., "active"
+    pub avatar_url: String,
+    pub can_create_sub_account: bool,
+    pub disk: Disk,
+    pub family_owner: Option<String>,
+    pub files_will_be_deleted_at: Option<String>, // ISO 8601 timestamp or null
+    pub is_eligible_for_friend_invitation: bool,
+    pub is_sub_account: bool,
     pub mail: String,
     pub monthly_bandwidth_usage: u64,
+    pub password_last_changed_at: Option<String>, // ISO 8601 timestamp or null
+    pub private_download_host_ip: Option<String>,
+    pub settings: Settings,
+    pub trash_size: u64,
+    pub user_id: u32,
+    pub username: String,
+    pub warnings: Option<serde_json::Value>, // Assuming warnings is a JSON object
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Disk {
+    pub avail: u64,
+    pub size: u64,
+    pub used: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Settings {
+    pub beta_user: bool,
+    pub callback_url: Option<String>,
+    pub dark_theme: bool,
+    pub default_download_folder: u32,
+    pub dont_autoselect_subtitles: bool,
+    pub fluid_layout: bool,
+    pub hide_subtitles: bool,
+    pub history_enabled: bool,
+    pub is_invisible: bool,
+    pub locale: Option<String>,
+    pub login_mails_enabled: bool,
+    pub next_episode: bool,
+    pub pushover_token: Option<String>,
+    pub show_optimistic_usage: bool,
+    pub sort_by: String, // e.g., "NAME_ASC"
+    pub start_from: bool,
+    pub subtitle_languages: Vec<String>, // Assuming it's an array of strings
+    pub theater_mode: bool,
+    pub theme: String, // e.g., "auto"
+    pub transfer_sort_by: Option<String>,
+    pub trash_enabled: bool,
+    pub tunnel_route_name: String, // e.g., "cdn77"
+    pub two_factor_enabled: bool,
+    pub use_private_download_ip: bool,
+    pub use_start_from: bool,
+    pub video_player: Option<String>,
 }
 
 pub async fn account_info(api_token: &str) -> Result<AccountInfoResponse> {
