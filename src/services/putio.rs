@@ -15,20 +15,69 @@ pub struct PutIOAccountResponse {
     pub info: PutIOAccountInfo,
 }
 
+#[derive(Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PutIOTransferStatus {
+    InQueue,
+    Waiting,
+    PreparingDownload,
+    Downloading,
+    Completing,
+    Seeding,
+    Completed,
+    Error,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PutIOTransferType {
+    Torrent,
+    Url,
+    Playlist,
+    LiveStream,
+    #[serde(rename = "N/A")]
+    NA,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct PutIOTransfer {
-    pub id: u64,
-    pub hash: Option<String>,
-    pub name: Option<String>,
-    pub size: Option<i64>,
+    pub availability: Option<u8>,
+    pub callback_url: Option<String>,
+    pub client_ip: Option<String>,
+    pub completion_percent: Option<u8>,
+    pub created_at: String,
+    pub created_torrent: bool,
+    pub current_ratio: Option<f32>,
+    pub down_speed: Option<i64>,
+    pub download_id: Option<u64>,
     pub downloaded: Option<i64>,
-    pub finished_at: Option<String>,
-    pub estimated_time: Option<u64>,
-    pub status: String,
-    pub started_at: Option<String>,
     pub error_message: Option<String>,
+    pub estimated_time: Option<u64>,
     pub file_id: Option<u64>,
-    pub percent_done: Option<u16>,
+    pub finished_at: Option<String>,
+    pub hash: Option<String>,
+    pub id: u64,
+    pub is_private: bool,
+    pub name: String,
+    pub peers_connected: Option<u32>,
+    pub peers_getting_from_us: Option<u32>,
+    pub peers_sending_to_us: Option<u32>,
+    pub percent_done: Option<u8>,
+    pub save_parent_id: Option<u64>,
+    pub seconds_seeding: Option<u64>,
+    pub simulated: bool,
+    pub size: Option<i64>,
+    pub source: Option<String>,
+    pub started_at: Option<String>,
+    pub status: PutIOTransferStatus,
+    pub subscription_id: Option<u64>,
+    pub torrent_link: Option<String>,
+    pub tracker: Option<String>,
+    pub tracker_message: Option<String>,
+    #[serde(rename = "type")]
+    pub type_: PutIOTransferType, // `type` is a reserved keyword in Rust
+    pub up_speed: Option<i64>,
+    pub uploaded: Option<i64>,
     pub userfile_exists: bool,
 }
 

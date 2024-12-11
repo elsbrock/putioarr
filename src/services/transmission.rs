@@ -3,7 +3,9 @@ use log::warn;
 use serde::{Deserialize, Serialize};
 use std::cmp::max;
 
-use super::putio::PutIOTransfer;
+use super::putio::{PutIOTransfer, PutIOTransferStatus};
+
+// see https://github.com/transmission/transmission/blob/main/docs/rpc-spec.md
 
 #[derive(Serialize, Debug)]
 pub struct TransmissionResponse {
@@ -83,8 +85,7 @@ impl From<PutIOTransfer> for TransmissionTorrent {
             .unwrap();
         let now = Utc::now();
         let seconds_downloading = (now - started_at).num_seconds();
-        let default = &"Unknown".to_string();
-        let name = t.name.as_ref().unwrap_or(default);
+        let name = &t.name;
         Self {
             id: t.id,
             hash_string: t.hash,
@@ -118,20 +119,17 @@ pub enum TransmissionTorrentStatus {
     Seeding = 6,
 }
 
-impl From<String> for TransmissionTorrentStatus {
-    fn from(value: String) -> Self {
-        match value.to_uppercase().as_str() {
-            "STOPPED" | "COMPLETED" | "ERROR" => Self::Stopped,
-            "CHECKWAIT" | "PREPARING_DOWNLOAD" => Self::CheckWait,
-            "CHECK" | "COMPLETING" => Self::Check,
-            "QUEUED" | "IN_QUEUE" => Self::Queued,
-            "DOWNLOADING" => Self::Downloading,
-            "SEEDINGWAIT" => Self::SeedingWait,
-            "SEEDING" => Self::Seeding,
-            _ => {
-                warn!("Status {} unknown. Treating as CheckWait.", &value);
-                Self::CheckWait
-            }
+impl From<PutIOTransferStatus> for TransmissionTorrentStatus {
+    fn from(status: PutIOTransferStatus) -> Self {
+        match status {
+            PutIOTransferStatus::InQueue => Self::Queued,
+            PutIOTransferStatus::Waiting => Self::CheckWait,
+            PutIOTransferStatus::Seeding => Self::Seeding,
+            PutIOTransferStatus::Completed => Self::Stopped,
+            PutIOTransferStatus::Completing => Self::Check,
+            PutIOTransferStatus::Downloading => Self::Downloading,
+            PutIOTransferStatus::Error => Self::Stopped,
+            PutIOTransferStatus::PreparingDownload => Self::CheckWait,
         }
     }
 }

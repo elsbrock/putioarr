@@ -1,9 +1,13 @@
+// This module handles the orchestration of downloads and transfers in the system.
+// It includes functionality for managing workers, monitoring downloads,
+// and handling the lifecycle of transfers from download to seeding.
+
 use crate::{
     download_system::{
         download::{DownloadDoneStatus, DownloadTargetMessage},
         transfer::Transfer,
     },
-    services::putio,
+    services::putio::{self, PutIOTransferStatus},
     AppData,
 };
 use actix_web::web::Data;
@@ -16,6 +20,7 @@ use tokio::{fs::metadata, time::sleep};
 
 use super::transfer::TransferMessage;
 
+/// Worker structure responsible for handling download and transfer operations
 #[derive(Clone)]
 pub struct Worker {
     _id: usize,
@@ -26,6 +31,7 @@ pub struct Worker {
 }
 
 impl Worker {
+    /// Starts a new worker with the given parameters
     pub fn start(
         id: usize,
         app_data: Data<AppData>,
@@ -43,11 +49,13 @@ impl Worker {
         let _join_handle = actix_rt::spawn(async move { s.work().await });
     }
 
+    /// Main worker loop that processes incoming transfer messages
     async fn work(&self) -> Result<()> {
         loop {
             let msg = self.rx.recv().await?;
             let app_data = self.app_data.clone();
             match msg {
+                // Handle downloads that are queued
                 TransferMessage::QueuedForDownload(t) => {
                     info!("{}: download {}", t, "started".yellow());
                     let targets = t.get_download_targets().await?;
@@ -57,6 +65,7 @@ impl Worker {
                         Receiver<DownloadDoneStatus>,
                     )> = &targets.iter().map(|_| async_channel::unbounded()).collect();
 
+                    // Send download targets to workers
                     for (i, target) in targets.iter().enumerate() {
                         let (done_tx, _) = done_channels[i].clone();
                         self.dtx
@@ -73,7 +82,7 @@ impl Worker {
                         all_downloaded.push(done_rx.recv().await?);
                     }
 
-                    // Check if all are success
+                    // Check if all downloads were successful
                     if all_downloaded.iter().all(|d| match d {
                         DownloadDoneStatus::Success(_) => true,
                         DownloadDoneStatus::Failed(_) => false,
@@ -90,10 +99,12 @@ impl Worker {
                         warn!("{}: not all targets downloaded", t)
                     }
                 }
+                // Handle completed downloads
                 TransferMessage::Downloaded(t) => {
                     let tx = self.tx.clone();
                     actix_rt::spawn(async { watch_for_import(app_data, tx, t).await });
                 }
+                // Handle imported transfers
                 TransferMessage::Imported(t) => {
                     actix_rt::spawn(async { watch_seeding(app_data, t).await });
                 }
@@ -102,6 +113,7 @@ impl Worker {
     }
 }
 
+/// Monitors a transfer for import completion and cleanup
 async fn watch_for_import(
     app_data: Data<AppData>,
     tx: Sender<TransferMessage>,
@@ -113,6 +125,7 @@ async fn watch_for_import(
             info!("{}: imported", transfer);
             let top_level_target = transfer.get_top_level();
 
+            // Clean up local files after import
             match metadata(&top_level_target.to).await {
                 Ok(m) if m.is_dir() => {
                     fs::remove_dir_all(&top_level_target.to).unwrap();
@@ -137,6 +150,7 @@ async fn watch_for_import(
     Ok(())
 }
 
+/// Monitors a transfer's seeding status and handles cleanup
 async fn watch_seeding(app_data: Data<AppData>, transfer: Transfer) -> Result<()> {
     info!("{}: watching seeding", transfer);
     loop {
@@ -144,8 +158,10 @@ async fn watch_seeding(app_data: Data<AppData>, transfer: Transfer) -> Result<()
             putio::get_transfer(&app_data.config.putio.api_key, transfer.transfer_id)
                 .await?
                 .transfer;
-        if putio_transfer.status != "SEEDING" {
+        // Check if seeding has stopped
+        if putio_transfer.status != PutIOTransferStatus::Seeding {
             info!("{}: stopped seeding", transfer);
+            // Clean up remote resources
             putio::remove_transfer(&app_data.config.putio.api_key, transfer.transfer_id).await?;
             info!("{}: removed from put.io", transfer);
             match putio::delete_file(&app_data.config.putio.api_key, transfer.file_id.unwrap())
