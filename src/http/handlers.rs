@@ -19,6 +19,7 @@ pub(crate) async fn handle_torrent_add(
     payload: &web::Json<TransmissionRequest>,
 ) -> Result<Option<serde_json::Value>> {
     let arguments = payload.arguments.as_ref().unwrap().as_object().unwrap();
+    info!("request to add, arguments: {:?}", arguments);
 
     if arguments.contains_key("metainfo") {
         // .torrent files
@@ -63,6 +64,7 @@ pub(crate) async fn handle_torrent_remove(
 ) -> Option<serde_json::Value> {
     // TODO: leanup all the unwrap stuff
     let arguments = payload.arguments.as_ref().unwrap().as_object().unwrap();
+    info!("request to remove, arguments: {:?}", arguments);
     let ids: Vec<&str> = arguments
         .get("ids")
         .unwrap()
@@ -72,6 +74,7 @@ pub(crate) async fn handle_torrent_remove(
         .map(|id| id.as_str().unwrap())
         .collect();
 
+    info!("removing torrents: {:?}", ids);
 
     let delete_local_data = arguments
         .get("delete-local-data")
@@ -87,8 +90,11 @@ pub(crate) async fn handle_torrent_remove(
         .filter(|t| ids.contains(&t.hash.clone().unwrap_or(String::from("no_hash")).as_str()))
         .collect();
 
+    info!("found {} put.io transfers", putio_transfers.len());
 
     for t in putio_transfers {
+        // log a message
+        info!("{}: removing", format!("[ffff: {:?}]", t.name).magenta());
 
         putio::remove_transfer(api_token, t.id).await.unwrap();
 
@@ -127,4 +133,14 @@ pub(crate) async fn handle_torrent_get(
     arguments.insert(String::from("torrents"), torrents);
 
     Some(json!(arguments))
+}
+
+pub(crate) async fn handle_torrent_set(
+    api_token: &str,
+    payload: &web::Json<TransmissionRequest>,
+) -> Option<serde_json::Value> {
+    // TODO: leanup all the unwrap stuff
+    let arguments = payload.arguments.as_ref().unwrap().as_object().unwrap();
+    info!("request to remove, arguments: {:?}", arguments);
+    None
 }

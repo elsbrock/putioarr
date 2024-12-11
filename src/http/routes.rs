@@ -47,8 +47,8 @@ pub(crate) async fn rpc_post(
             download_dir: app_data.config.download_directory.clone(),
             ..Default::default()
         })),
-        "torrent-set" => None, // Nothing to do here
         "torrent-get" => handle_torrent_get(putio_api_token, target_folder_id, &app_data).await,
+        "torrent-set" => handle_torrent_set(putio_api_token, &payload).await,
         "queue-move-top" => None,
         "torrent-remove" => handle_torrent_remove(putio_api_token, &payload).await,
         "torrent-add" => {
