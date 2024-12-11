@@ -1,6 +1,7 @@
 use std::sync::{Mutex, RwLock, RwLockWriteGuard};
+
 use crate::{http::routes, services::putio};
-use actix_web::{web, App, HttpServer};
+use actix_web::{middleware::Logger, web, App, HttpServer};
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
@@ -217,9 +218,9 @@ async fn main() -> Result<()> {
             );
             HttpServer::new(move || {
                 App::new()
-                    // .wrap(Logger::new(
-                    //     "%a \"%r\" %s %b \"%{Referer}i\" \"%{User-Agent}i\" %T",
-                    // ))
+                    .wrap(Logger::new(
+                        "%a \"%r\" %s %b \"%{Referer}i\" \"%{User-Agent}i\" %T",
+                    ))
                     .app_data(app_data.clone())
                     .service(routes::rpc_post)
                     .service(routes::rpc_get)
