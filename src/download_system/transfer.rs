@@ -43,8 +43,6 @@ impl Transfer {
             .into_iter()
             .filter(|t| t.target_type == TargetType::File)
             .collect::<Vec<DownloadTarget>>();
-        // .map(|t| t.to.clone())
-        // .collect::<Vec<String>>();
 
         let mut results = Vec::<bool>::new();
         for target in targets {
@@ -53,7 +51,7 @@ impl Transfer {
                 let service_result = match arr::check_imported(&target.to, key, url).await {
                     Ok(r) => r,
                     Err(e) => {
-                        error!("Error retrieving history form {}: {}", service_name, e);
+                        error!("Error retrieving history from {}: {}", service_name, e);
                         false
                     }
                 };
@@ -90,8 +88,7 @@ impl Transfer {
     }
 
     pub fn from(app_data: Data<AppData>, transfer: &PutIOTransfer) -> Self {
-        let default = &"Unknown".to_string();
-        let name = transfer.name.as_ref().unwrap_or(default);
+        let name = &transfer.name;
         Self {
             transfer_id: transfer.id,
             name: name.clone(),
@@ -120,7 +117,7 @@ async fn recurse_download_targets(
     override_base_path: Option<String>,
     top_level: bool,
 ) -> Result<Vec<DownloadTarget>> {
-    let base_path = override_base_path.unwrap_or(app_data.config.download_directory.clone());
+    let base_path = "."; //override_base_path.unwrap_or(app_data.config.download_directory.clone());
     let mut targets = Vec::<DownloadTarget>::new();
     let response = putio::list_files(&app_data.config.putio.api_key, file_id).await?;
     let to = Path::new(&base_path)
@@ -206,7 +203,23 @@ pub enum TargetType {
     File,
 }
 
-// Check for new putio transfers and if they qualify, send them on for download
+/// Monitors Put.io transfers and manages the download/import pipeline
+///
+/// This function runs in an infinite loop and performs the following:
+/// 1. Initially checks for any unfinished transfers that may need importing
+/// 2. Maintains a list of seen transfer IDs to avoid re-processing
+/// 3. Polls Put.io API at configured intervals to check for new transfers
+/// 4. When a new downloadable transfer is found:
+///    - Queues it for download by sending QueuedForDownload message
+///    - Marks it as seen to avoid duplicate processing
+/// 5. Cleans up the seen transfers list by removing completed/deleted transfers
+///
+/// # Arguments
+/// * `app_data` - Application configuration and state
+/// * `tx` - Channel sender for communicating transfer status updates
+///
+/// # Returns
+/// Result indicating success or failure of the monitoring process
 pub async fn produce_transfers(app_data: Data<AppData>, tx: Sender<TransferMessage>) -> Result<()> {
     let putio_check_interval = std::time::Duration::from_secs(app_data.config.polling_interval);
     let mut seen = Vec::<u64>::new();
@@ -217,9 +230,17 @@ pub async fn produce_transfers(app_data: Data<AppData>, tx: Sender<TransferMessa
     // This avoids downloading a tranfer that has already been imported. In case there is a download,
     // but it wasn't (completely) imported, we will attempt a (partial) download. Files that have
     // been completed downloading will be skipped.
+    let target_folder_id = {
+        let folder_id = app_data.root_folder_id.read().unwrap();
+        *folder_id
+    };
+
     for putio_transfer in &putio::list_transfers(&app_data.config.putio.api_key)
         .await?
         .transfers
+        .iter()
+        .filter(|t| t.save_parent_id == Some(target_folder_id))
+        .collect::<Vec<&PutIOTransfer>>()
     {
         let mut transfer = Transfer::from(app_data.clone(), putio_transfer);
         if putio_transfer.is_downloadable() {

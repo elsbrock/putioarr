@@ -1,3 +1,4 @@
+use std::sync::{Mutex, RwLock, RwLockWriteGuard};
 use crate::{http::routes, services::putio};
 use actix_web::{web, App, HttpServer};
 use anyhow::{bail, Context, Result};
@@ -73,6 +74,7 @@ pub struct ArrConfig {
 
 pub struct AppData {
     pub config: Config,
+    root_folder_id: RwLock<u64>,
 }
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -122,6 +124,7 @@ async fn main() -> Result<()> {
 
             let app_data = web::Data::new(AppData {
                 config: config.clone(),
+                root_folder_id: RwLock::new(0),
             });
 
             match putio::account_info(&app_data.config.putio.api_key).await {
@@ -145,6 +148,39 @@ async fn main() -> Result<()> {
                     bail!(e)
                 }
             }
+
+            // create putioarr folder on put.io if it doesn't exist
+            match putio::create_folder(&app_data.config.putio.api_key, "putioarr", 0).await {
+                Ok(_) => info!("Created putioarr folder on put.io"),
+                Err(e) => {
+                    if e.to_string().contains("400 Bad Request") {
+                        info!("putioarr folder already exists on put.io");
+                    } else {
+                        error!("Failed to create putioarr folder: {}", e);
+                        bail!(e);
+                    }
+                    // get folder ID of putioarr folder and store it in config
+                    match putio::list_files(&app_data.config.putio.api_key, 0).await {
+                        Ok(file_list) => {
+                            // find folder with name "putioarr"
+                            let folder_id = file_list
+                                .files
+                                .iter()
+                                .find(|f| f.name == "putioarr")
+                                .unwrap()
+                                .id;
+                            info!("putioarr folder ID: {}", folder_id);
+                            let mut config_folder_id: RwLockWriteGuard<u64> =
+                                app_data.root_folder_id.write().unwrap();
+                            *config_folder_id = folder_id;
+                        }
+                        Err(e) => {
+                            error!("Failed to get folder ID: {}", e);
+                            bail!(e);
+                        }
+                    }
+                }
+            };
 
             let data_for_download_system = app_data.clone();
             download_system::start(data_for_download_system)

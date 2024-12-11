@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Ok, Result};
 use reqwest::multipart;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::Duration};
@@ -191,7 +191,15 @@ pub async fn list_transfers(api_token: &str) -> Result<ListTransferResponse> {
         bail!("Error getting put.io transfers: {}", response.status());
     }
 
-    Ok(response.json().await?)
+    // get response, filter for all transfers by save_parent_id = 0
+    let response_json: ListTransferResponse = response.json().await?;
+    let transfers = response_json
+        .transfers
+        .into_iter()
+        .filter(|transfer| transfer.save_parent_id == Some(1451896072))
+        .collect();
+
+    Ok(ListTransferResponse { transfers })
 }
 
 pub async fn get_transfer(api_token: &str, transfer_id: u64) -> Result<GetTransferResponse> {
@@ -249,7 +257,7 @@ pub async fn delete_file(api_token: &str, file_id: u64) -> Result<()> {
 
     if !response.status().is_success() {
         bail!(
-            "Error removing put.io file/direcotry id:{}: {}",
+            "Error removing put.io file/directory id:{}: {}",
             file_id,
             response.status()
         );
@@ -258,9 +266,11 @@ pub async fn delete_file(api_token: &str, file_id: u64) -> Result<()> {
     Ok(())
 }
 
-pub async fn add_transfer(api_token: &str, url: &str) -> Result<()> {
+pub async fn add_transfer(api_token: &str, folder_id: u64, url: &str) -> Result<()> {
     let client = reqwest::Client::new();
-    let form = multipart::Form::new().text("url", url.to_string());
+    let form = multipart::Form::new()
+        .text("url", url.to_string())
+        .text("save_parent_id", folder_id.to_string());
     let response = client
         .post("https://api.put.io/v2/transfers/add")
         .timeout(Duration::from_secs(10))
@@ -276,13 +286,14 @@ pub async fn add_transfer(api_token: &str, url: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn upload_file(api_token: &str, bytes: &[u8]) -> Result<()> {
+pub async fn upload_file(api_token: &str, folder_id: u64, bytes: &[u8]) -> Result<()> {
     let client = reqwest::Client::new();
     let file_part = multipart::Part::bytes(bytes.to_owned()).file_name("foo.torrent");
 
     let form = reqwest::multipart::Form::new()
         .part("file", file_part)
-        .text("filename", "foo.torrent");
+        .text("filename", "foo.torrent")
+        .text("parent_id", folder_id.to_string());
 
     let response = client
         .post("https://upload.put.io/v2/files/upload")
@@ -317,6 +328,11 @@ pub struct FileResponse {
     pub file_type: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateFolderResponse {
+    pub file: FileResponse,
+}
+
 pub async fn list_files(api_token: &str, file_id: u64) -> Result<ListFileResponse> {
     let client = reqwest::Client::new();
     let response = client
@@ -336,6 +352,29 @@ pub async fn list_files(api_token: &str, file_id: u64) -> Result<ListFileRespons
         );
     }
 
+    Ok(response.json().await?)
+}
+
+pub async fn create_folder(
+    api_token: &str,
+    name: &str,
+    parent_id: u64,
+) -> Result<CreateFolderResponse> {
+    let folder_name = name.to_string();
+    let client = reqwest::Client::new();
+    let form = multipart::Form::new()
+        .text("name", folder_name)
+        .text("parent_id", parent_id.to_string());
+    let response = client
+        .post("https://api.put.io/v2/files/create-folder")
+        .timeout(Duration::from_secs(10))
+        .multipart(form)
+        .header("authorization", format!("Bearer {}", api_token))
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        bail!("Error creating put.io folder: {}", response.status());
+    }
     Ok(response.json().await?)
 }
 

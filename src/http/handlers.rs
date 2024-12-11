@@ -15,16 +15,18 @@ use serde_json::json;
 
 pub(crate) async fn handle_torrent_add(
     api_token: &str,
+    target_folder_id: u64,
     payload: &web::Json<TransmissionRequest>,
 ) -> Result<Option<serde_json::Value>> {
     let arguments = payload.arguments.as_ref().unwrap().as_object().unwrap();
+
     if arguments.contains_key("metainfo") {
         // .torrent files
         let b64 = arguments["metainfo"].as_str().unwrap();
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(b64)
             .unwrap();
-        putio::upload_file(api_token, &bytes).await?;
+        putio::upload_file(api_token, target_folder_id, &bytes).await?;
 
         match Torrent::read_from_bytes(bytes) {
             Ok(t) => {
@@ -39,7 +41,7 @@ pub(crate) async fn handle_torrent_add(
     } else {
         // Magnet links
         let magnet_url = arguments["filename"].as_str().unwrap();
-        putio::add_transfer(api_token, magnet_url).await?;
+        putio::add_transfer(api_token, target_folder_id, magnet_url).await?;
         match Magnet::new(magnet_url) {
             Ok(m) if m.dn.is_some() => {
                 info!(
@@ -69,6 +71,8 @@ pub(crate) async fn handle_torrent_remove(
         .iter()
         .map(|id| id.as_str().unwrap())
         .collect();
+
+
     let delete_local_data = arguments
         .get("delete-local-data")
         .unwrap()
@@ -83,7 +87,9 @@ pub(crate) async fn handle_torrent_remove(
         .filter(|t| ids.contains(&t.hash.clone().unwrap_or(String::from("no_hash")).as_str()))
         .collect();
 
+
     for t in putio_transfers {
+
         putio::remove_transfer(api_token, t.id).await.unwrap();
 
         if t.userfile_exists && delete_local_data {
@@ -98,9 +104,14 @@ pub(crate) async fn handle_torrent_remove(
 
 pub(crate) async fn handle_torrent_get(
     api_token: &str,
+    target_folder_id: u64,
     app_data: &web::Data<AppData>,
 ) -> Option<serde_json::Value> {
     let transfers = putio::list_transfers(api_token).await.unwrap().transfers;
+    let transfers: Vec<PutIOTransfer> = transfers
+        .into_iter()
+        .filter(|t| t.save_parent_id == Some(target_folder_id))
+        .collect();
 
     let transmission_transfers = transfers.into_iter().map(|t| async {
         let mut tt: TransmissionTorrent = t.into();

@@ -1,6 +1,11 @@
 use crate::{
-    http::handlers::{handle_torrent_add, handle_torrent_get, handle_torrent_remove},
-    services::transmission::{TransmissionConfig, TransmissionRequest, TransmissionResponse},
+    http::handlers::{
+        handle_torrent_add, handle_torrent_get, handle_torrent_remove, handle_torrent_set,
+    },
+    services::{
+        putio,
+        transmission::{TransmissionConfig, TransmissionRequest, TransmissionResponse},
+    },
     AppData,
 };
 use actix_web::{
@@ -10,7 +15,7 @@ use actix_web::{
 };
 use actix_web_httpauth::headers::authorization::{Authorization, Basic};
 use anyhow::{bail, Context, Result};
-use log::error;
+use log::{error, info};
 use serde_json::json;
 
 const SESSION_ID: &str = "useless-session-id";
@@ -22,6 +27,10 @@ pub(crate) async fn rpc_post(
     app_data: web::Data<AppData>,
 ) -> HttpResponse {
     let putio_api_token = &app_data.config.putio.api_key;
+    let target_folder_id = {
+        let folder_id = app_data.root_folder_id.read().unwrap();
+        *folder_id
+    };
 
     // Not sure if necessary since we might just look at the session id.
     if validate_user(req, &app_data).await.is_err() {
@@ -31,22 +40,26 @@ pub(crate) async fn rpc_post(
             .body("");
     }
 
+    info!("client rpc request for {}", payload.method);
+
     let arguments = match payload.method.as_str() {
         "session-get" => Some(json!(TransmissionConfig {
             download_dir: app_data.config.download_directory.clone(),
             ..Default::default()
         })),
-        "torrent-get" => handle_torrent_get(putio_api_token, &app_data).await,
         "torrent-set" => None, // Nothing to do here
+        "torrent-get" => handle_torrent_get(putio_api_token, target_folder_id, &app_data).await,
         "queue-move-top" => None,
         "torrent-remove" => handle_torrent_remove(putio_api_token, &payload).await,
-        "torrent-add" => match handle_torrent_add(putio_api_token, &payload).await {
-            Ok(v) => v,
-            Err(e) => {
-                error!("{}", e);
-                return HttpResponse::BadRequest().body(e.to_string());
+        "torrent-add" => {
+            match handle_torrent_add(putio_api_token, target_folder_id, &payload).await {
+                Ok(v) => v,
+                Err(e) => {
+                    error!("{}", e);
+                    return HttpResponse::BadRequest().body(e.to_string());
+                }
             }
-        },
+        }
         _ => panic!("Unknwon method {}", payload.method),
     };
 
