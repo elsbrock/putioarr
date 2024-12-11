@@ -18,6 +18,30 @@ pub struct ArrHistoryRecord {
     pub data: HashMap<String, Option<String>>,
 }
 
+/// Checks if a given API key is valid for a given target
+/// # Returns
+/// - Ok(()) if the API key is valid
+/// - Err(anyhow::Error) if the API key is invalid
+pub async fn verify_auth(target: &str, api_key: &str, base_url: &str) -> Result<()> {
+    let client = reqwest::Client::new();
+    let url = format!("{base_url}/api");
+    let response = client.get(url).header("X-Api-Key", api_key).send().await?;
+    if response.status() == reqwest::StatusCode::OK {
+        Ok(())
+    } else {
+        bail!("Invalid API key for {target}")
+    }
+}
+
+/// Checks if a given target path has been imported by querying the Radarr/Sonarr history API
+///
+/// # Arguments
+/// * `target` - The path to check for import status
+/// * `api_key` - API key for authentication
+/// * `base_url` - Base URL of the Radarr/Sonarr instance
+///
+/// # Returns
+/// * `Result<bool>` - Ok(true) if target was found in import history, Ok(false) if not found
 pub async fn check_imported(target: &str, api_key: &str, base_url: &str) -> Result<bool> {
     let client = reqwest::Client::new();
     let mut inspected = 0;
