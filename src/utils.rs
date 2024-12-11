@@ -67,6 +67,11 @@ struct Context {
 }
 
 pub async fn generate_config(config_path: &str) -> Result<()> {
+    // ensure config_path directory exists, if not, create it
+    if !Path::new(&config_path).exists() {
+        fs::create_dir_all(config_path)?;
+    }
+
     println!("Generating config {}", &config_path);
     let putio_api_key = get_token().await?;
 
