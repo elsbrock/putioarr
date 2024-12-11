@@ -1,3 +1,4 @@
+// Module for handling file downloads and directory creation
 use super::transfer::{DownloadTarget, TargetType};
 use crate::AppData;
 use actix_web::web::Data;
@@ -10,6 +11,7 @@ use log::{error, info};
 use nix::unistd::Uid;
 use std::{fs, path::Path};
 
+/// Worker struct responsible for processing download tasks
 #[derive(Clone)]
 pub struct Worker {
     _id: usize,
@@ -18,6 +20,7 @@ pub struct Worker {
 }
 
 impl Worker {
+    /// Creates and starts a new worker with the given ID and channels
     pub fn start(id: usize, app_data: Data<AppData>, drx: Receiver<DownloadTargetMessage>) {
         let s = Self {
             _id: id,
@@ -27,6 +30,8 @@ impl Worker {
 
         let _join_handle = actix_rt::spawn(async move { s.work().await });
     }
+
+    /// Main worker loop that processes download targets
     async fn work(&self) -> Result<()> {
         loop {
             // Wait for a DownloadTarget
@@ -42,6 +47,7 @@ impl Worker {
     }
 }
 
+/// Handles the download of a target, which can be either a directory or file
 async fn download_target(app_data: &Data<AppData>, target: &DownloadTarget) -> Result<()> {
     match target.target_type {
         TargetType::Directory => {
@@ -72,6 +78,7 @@ async fn download_target(app_data: &Data<AppData>, target: &DownloadTarget) -> R
     Ok(())
 }
 
+/// Downloads a file from a URL to a temporary location and then moves it to the final destination
 async fn fetch(target: &DownloadTarget, uid: u32) -> Result<()> {
     let tmp_path = format!("{}.downloading", &target.to);
     let mut tmp_file = tokio::fs::File::create(&tmp_path).await?;
@@ -91,12 +98,14 @@ async fn fetch(target: &DownloadTarget, uid: u32) -> Result<()> {
     Ok(())
 }
 
+/// Message struct containing a download target and a channel for status updates
 #[derive(Debug, Clone)]
 pub struct DownloadTargetMessage {
     pub download_target: DownloadTarget,
     pub tx: Sender<DownloadDoneStatus>,
 }
 
+/// Enum representing the status of a completed download
 #[derive(Debug, Clone)]
 pub enum DownloadDoneStatus {
     Success(DownloadTarget),

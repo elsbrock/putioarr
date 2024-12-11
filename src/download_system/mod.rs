@@ -1,3 +1,5 @@
+/// Module for managing the download system and its components.
+/// Contains submodules for download, orchestration, and transfer functionality.
 use crate::AppData;
 use actix_web::web::Data;
 use anyhow::Result;
@@ -6,6 +8,13 @@ pub mod download;
 pub mod orchestration;
 pub mod transfer;
 
+/// Starts the download system by initializing workers and communication channels.
+///
+/// # Arguments
+/// * `app_data` - Shared application data wrapped in an Actix Data container
+///
+/// # Returns
+/// * `Result<()>` - Ok if the system starts successfully
 pub async fn start(app_data: Data<AppData>) -> Result<()> {
     let (sender, receiver) = async_channel::unbounded();
     let (download_sender, download_receiver) = async_channel::unbounded();
