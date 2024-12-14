@@ -102,52 +102,11 @@ impl Worker {
                 // Handle completed downloads
                 TransferMessage::Downloaded(t) => {
                     let tx = self.tx.clone();
-                    actix_rt::spawn(async { watch_for_import(app_data, tx, t).await });
-                }
-                // Handle imported transfers
-                TransferMessage::Imported(t) => {
                     actix_rt::spawn(async { watch_seeding(app_data, t).await });
                 }
             }
         }
     }
-}
-
-/// Monitors a transfer for import completion and cleanup
-async fn watch_for_import(
-    app_data: Data<AppData>,
-    tx: Sender<TransferMessage>,
-    transfer: Transfer,
-) -> Result<()> {
-    info!("{}: watching imports", transfer);
-    loop {
-        if transfer.is_imported().await {
-            info!("{}: imported", transfer);
-            let top_level_target = transfer.get_top_level();
-
-            // Clean up local files after import
-            match metadata(&top_level_target.to).await {
-                Ok(m) if m.is_dir() => {
-                    fs::remove_dir_all(&top_level_target.to).unwrap();
-                    info!("{}: deleted", &top_level_target);
-                }
-                Ok(m) if m.is_file() => {
-                    fs::remove_file(&top_level_target.to).unwrap();
-                    info!("{}: deleted", &top_level_target);
-                }
-                Ok(_) | Err(_) => {
-                    panic!("{}: no idea how to handle", &top_level_target)
-                }
-            };
-            let m = transfer.clone();
-            tx.send(TransferMessage::Imported(m)).await?;
-
-            break;
-        }
-        sleep(Duration::from_secs(app_data.config.polling_interval)).await;
-    }
-    info!("{}: removed", transfer);
-    Ok(())
 }
 
 /// Monitors a transfer's seeding status and handles cleanup

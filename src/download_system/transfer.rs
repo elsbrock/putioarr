@@ -1,8 +1,5 @@
 use crate::{
-    services::{
-        arr,
-        putio::{self, PutIOTransfer},
-    },
+    services::putio::{self, PutIOTransfer},
     AppData,
 };
 use actix_web::web::Data;
@@ -26,51 +23,6 @@ pub struct Transfer {
 }
 
 impl Transfer {
-    pub async fn is_imported(&self) -> bool {
-        let targets = self.targets.as_ref().unwrap().clone();
-        let mut check_services = Vec::<(&str, String, String)>::new();
-        if let Some(a) = &self.app_data.config.sonarr {
-            check_services.push(("Sonarr", a.url.clone(), a.api_key.clone()))
-        }
-        if let Some(a) = &self.app_data.config.radarr {
-            check_services.push(("Radarr", a.url.clone(), a.api_key.clone()))
-        }
-        if let Some(a) = &self.app_data.config.whisparr {
-            check_services.push(("Whisparr", a.url.clone(), a.api_key.clone()))
-        }
-
-        let targets = targets
-            .into_iter()
-            .filter(|t| t.target_type == TargetType::File)
-            .collect::<Vec<DownloadTarget>>();
-
-        let mut results = Vec::<bool>::new();
-        for target in targets {
-            let mut service_results = vec![];
-            for (service_name, url, key) in &check_services {
-                let service_result = match arr::check_imported(&target.to, key, url).await {
-                    Ok(r) => r,
-                    Err(e) => {
-                        error!("Error retrieving history from {}: {}", service_name, e);
-                        false
-                    }
-                };
-                if service_result {
-                    info!(
-                        "{}: found imported by {}",
-                        &target,
-                        service_name.bright_blue()
-                    );
-                }
-                service_results.push(service_result)
-            }
-            // Check if ANY of the service_results are true and put the outcome in results
-            results.push(service_results.into_iter().any(|x| x));
-        }
-        // Check if all targets have been imported
-        results.into_iter().all(|x| x)
-    }
-
     pub async fn get_download_targets(&self) -> Result<Vec<DownloadTarget>> {
         info!("{}: generating targets", self);
         let default = "0000".to_string();
@@ -177,7 +129,6 @@ async fn recurse_download_targets(
 pub enum TransferMessage {
     QueuedForDownload(Transfer),
     Downloaded(Transfer),
-    Imported(Transfer),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -246,13 +197,6 @@ pub async fn produce_transfers(app_data: Data<AppData>, tx: Sender<TransferMessa
         if putio_transfer.is_downloadable() {
             let targets = transfer.get_download_targets().await?;
             transfer.targets = Some(targets);
-            if transfer.is_imported().await {
-                info!("{}: already imported", &transfer);
-                seen.push(transfer.transfer_id);
-                tx.send(TransferMessage::Imported(transfer)).await?;
-            } else {
-                info!("{}: not imported yet", &transfer);
-            }
         }
     }
     info!("Done checking for unfinished transfers. Starting to monitor transfers.");

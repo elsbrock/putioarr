@@ -42,23 +42,6 @@ download_workers = 4
 [putio]
 # Required. Putio API key. You can generate one using `putioarr get-token`
 api_key =  "{putio_api_key}"
-
-# Both [sonarr] and [radarr] are optional, but you'll need at least one of them
-[sonarr]
-url = "http://mysonarrhost:8989/sonarr"
-# Can be found in Settings -> General
-api_key = "MYSONARRAPIKEY"
-
-[radarr]
-url = "http://myradarrhost:7878/radarr"
-# Can be found in Settings -> General
-api_key = "MYRADARRAPIKEY"
-
-[whisparr]
-url = "http://mywhisparrhost:6969/radarr"
-# Can be found in Settings -> General
-api_key = "MYWHISPARRAPIKEY"
-
 "#;
 
 #[derive(Serialize)]

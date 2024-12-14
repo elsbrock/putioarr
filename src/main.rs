@@ -12,7 +12,6 @@ use figment::{
 };
 use log::{error, info};
 use serde::{Deserialize, Serialize};
-use services::arr;
 use utils::{generate_config, get_token};
 
 mod download_system;
@@ -58,9 +57,6 @@ pub struct Config {
     uid: u32,
     username: String,
     putio: PutioConfig,
-    sonarr: Option<ArrConfig>,
-    radarr: Option<ArrConfig>,
-    whisparr: Option<ArrConfig>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -183,29 +179,6 @@ async fn main() -> Result<()> {
                     }
                 }
             };
-
-            // verify arr keys
-            let mut check_services = Vec::<(&str, String, String)>::new();
-            if let Some(a) = &app_data.config.sonarr {
-                check_services.push(("Sonarr", a.url.clone(), a.api_key.clone()))
-            }
-            if let Some(a) = &app_data.config.radarr {
-                check_services.push(("Radarr", a.url.clone(), a.api_key.clone()))
-            }
-            if let Some(a) = &app_data.config.whisparr {
-                check_services.push(("Whisparr", a.url.clone(), a.api_key.clone()))
-            }
-            for (service_name, base_url, api_key) in &check_services {
-                info!("Verifying api_key for {} at {}", service_name, base_url);
-                match arr::verify_auth(service_name, api_key, base_url).await {
-                    Ok(_) => {
-                        info!("API key is valid for {}", service_name);
-                    }
-                    Err(e) => {
-                        bail!("invalid authentication key for {}: {}", service_name, e);
-                    }
-                };
-            }
 
             let data_for_download_system = app_data.clone();
             download_system::start(data_for_download_system)
