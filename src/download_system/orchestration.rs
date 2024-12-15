@@ -57,7 +57,7 @@ impl Worker {
             match msg {
                 // Handle downloads that are queued
                 TransferMessage::QueuedForDownload(t) => {
-                    info!("{}: download {}", t, "started".yellow());
+                    info!("{}: transfer {}", t, "started".yellow());
                     let targets = t.get_download_targets().await?;
                     // Create a communications channel for the download worker to communicate status back.
                     let done_channels: &Vec<(

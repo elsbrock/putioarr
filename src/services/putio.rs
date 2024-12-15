@@ -1,4 +1,5 @@
 use anyhow::{bail, Ok, Result};
+use colored::Colorize;
 use reqwest::multipart;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, time::Duration};
@@ -79,6 +80,21 @@ pub struct PutIOTransfer {
     pub up_speed: Option<i64>,
     pub uploaded: Option<i64>,
     pub userfile_exists: bool,
+}
+
+// implement display for PutIOTransfer
+impl std::fmt::Display for PutIOTransfer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // show the name of the transfer, size, progress, time remaining, seed status, and error message
+        write!(
+            f,
+            "{} {:.2}GB {}% {}",
+            format!("{}", self.name).cyan(),
+            self.size.unwrap_or(0) as f64 / 1_073_741_824.0,
+            self.percent_done.unwrap_or(0),
+            self.error_message.as_ref().unwrap_or(&String::from(""))
+        )
+    }
 }
 
 impl PutIOTransfer {
@@ -376,6 +392,48 @@ pub async fn create_folder(
         bail!("Error creating put.io folder: {}", response.status());
     }
     Ok(response.json().await?)
+}
+
+pub async fn get_config(api_token: &str, key: &str) -> Result<String> {
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!("https://api.put.io/v2/users/config/{}", key))
+        .header("authorization", format!("Bearer {}", api_token))
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        bail!("Error getting put.io config: {}", response.status());
+    }
+    Ok(response.text().await?)
+}
+
+pub async fn set_config(api_token: &str, key: &str, value: &str) -> Result<()> {
+    let client = reqwest::Client::new();
+    let form = multipart::Form::new().text("value", value.to_string());
+    let response = client
+        .post(format!("https://api.put.io/v2/users/config/{}", key))
+        .timeout(Duration::from_secs(10))
+        .multipart(form)
+        .header("authorization", format!("Bearer {}", api_token))
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        bail!("Error setting put.io config: {}", response.status());
+    }
+    Ok(())
+}
+
+pub async fn delete_config(api_token: &str, key: &str) -> Result<()> {
+    let client = reqwest::Client::new();
+    let response = client
+        .delete(format!("https://api.put.io/v2/users/config/{}", key))
+        .header("authorization", format!("Bearer {}", api_token))
+        .send()
+        .await?;
+    if !response.status().is_success() {
+        bail!("Error deleting put.io config: {}", response.status());
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize)]

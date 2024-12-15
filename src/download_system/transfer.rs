@@ -173,33 +173,12 @@ pub enum TargetType {
 /// Result indicating success or failure of the monitoring process
 pub async fn produce_transfers(app_data: Data<AppData>, tx: Sender<TransferMessage>) -> Result<()> {
     let putio_check_interval = std::time::Duration::from_secs(app_data.config.polling_interval);
-    let mut seen = Vec::<u64>::new();
-
-    info!("Checking unfinished transfers");
-    // We only need to check if something has been imported. Just by looking at the filesystem we
-    // can't determine if a transfer has been imported and removed or hasn't been downloaded.
-    // This avoids downloading a tranfer that has already been imported. In case there is a download,
-    // but it wasn't (completely) imported, we will attempt a (partial) download. Files that have
-    // been completed downloading will be skipped.
     let target_folder_id = {
         let folder_id = app_data.root_folder_id.read().unwrap();
         *folder_id
     };
-
-    for putio_transfer in &putio::list_transfers(&app_data.config.putio.api_key)
-        .await?
-        .transfers
-        .iter()
-        .filter(|t| t.save_parent_id == Some(target_folder_id))
-        .collect::<Vec<&PutIOTransfer>>()
-    {
-        let mut transfer = Transfer::from(app_data.clone(), putio_transfer);
-        if putio_transfer.is_downloadable() {
-            let targets = transfer.get_download_targets().await?;
-            transfer.targets = Some(targets);
-        }
-    }
-    info!("Done checking for unfinished transfers. Starting to monitor transfers.");
+    let mut seen = Vec::<u64>::new();
+    info!("Starting to monitor transfers.");
 
     // Set the start time
     let mut start = std::time::Instant::now();
@@ -208,24 +187,31 @@ pub async fn produce_transfers(app_data: Data<AppData>, tx: Sender<TransferMessa
         if let Ok(list_transfer_response) =
             putio::list_transfers(&app_data.config.putio.api_key).await
         {
-            for putio_transfer in &list_transfer_response.transfers {
-                if seen.contains(&putio_transfer.id) || !putio_transfer.is_downloadable() {
-                    continue;
-                }
+            // filter for transfers with root_folder_id as parent
+            let transfers: Vec<&PutIOTransfer> = list_transfer_response
+                .transfers
+                .iter()
+                .filter(|t| t.save_parent_id == Some(target_folder_id))
+                .collect();
+
+            info!("Found {} transfers", transfers.len());
+
+            for putio_transfer in &transfers {
                 let transfer = Transfer::from(app_data.clone(), putio_transfer);
 
-                info!("{}: ready for download", transfer);
+                if seen.contains(&putio_transfer.id) || !putio_transfer.is_downloadable() {
+                    info!("  {}", putio_transfer);
+                    continue;
+                }
+
+                info!("  {}: ready for download", transfer);
                 tx.send(TransferMessage::QueuedForDownload(transfer))
                     .await?;
                 seen.push(putio_transfer.id);
             }
 
             // Remove any transfers from seen that are not in the active transfers
-            let active_ids: Vec<u64> = list_transfer_response
-                .transfers
-                .iter()
-                .map(|t| t.id)
-                .collect();
+            let active_ids: Vec<u64> = transfers.into_iter().map(|t| t.id).collect();
             seen.retain(|t| active_ids.contains(t));
 
             // Log status when 60 seconds have passed since last time
